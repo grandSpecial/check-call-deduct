@@ -1,4 +1,4 @@
-# A study documenting a previously unreported race condition vector for Denial of Wallet attacks, systematically introduced by AI code generation tools into credit-gating logic.
+# A study documenting a race condition vector for Denial of Wallet attacks systematically introduced by AI code generation tools into credit-gating logic.
 
 A study demonstrating that major LLMs systematically generate a race condition vulnerability in credit-gated API functions — and correctly identify it when asked to audit their own output.
 
@@ -102,12 +102,10 @@ export OPENROUTER_API_KEY=your_key_here
 
 Run the study:
 ```bash
-python Race_Condition_Benchmarking.ipynb
+jupyter nbconvert --to notebook --execute Race_Condition_Benchmarking.ipynb --output Race_Condition_Benchmarking.executed.ipynb
 ```
 
 Results are saved to `results/dow_study_{timestamp}.json`.
-
-*Note*: This notebook was designed for Google Colab. The google.colab dependency for secrets management is not available locally. Export your `OPENROUTER_API_KEY` to your environment and replace `userdata.get('OPENROUTER_API_KEY')` with `os.environ.get('OPENROUTER_API_KEY')` when running locally.
 
 ---
 
@@ -119,7 +117,7 @@ All 50 generation outputs were reviewed manually using a purpose-built annotatio
 python review/review_app.py
 ```
 
-Open http://127.0.0.1:8765 in your browser. The app loads all result files from `/results`, displays generated code and audit output side by side, and allows you to save annotations per entry. Annotations are saved to `review/annotations.json`.
+Open http://127.0.0.1:8765 in your browser. The app loads all result files from `results/`, displays generated code and audit output side by side, and allows you to save annotations per entry. Annotations are saved to `review/annotations.json`.
 
 ---
 
