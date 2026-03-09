@@ -81,7 +81,7 @@ The notebook runs against live models via [OpenRouter](https://openrouter.ai). Y
 
 **In Google Colab:**
 
-Open the notebook directly: https://colab.research.google.com/drive/1NdpbOuCYpedRPBY2DmlY6bwqu3_2Resi
+Open the notebook directly: https://colab.research.google.com/github/grandSpecial/check-call-deduct/blob/main/Race_Condition_Benchmarking.ipynb
 
 Add your OpenRouter API key to Colab secrets as `OPENROUTER_API_KEY`.
 
