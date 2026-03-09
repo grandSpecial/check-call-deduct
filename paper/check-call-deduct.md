@@ -273,7 +273,7 @@ An attacker targeting this vulnerability does not need to reverse-engineer a pro
 
 This vulnerability does not fit neatly into existing security categories, which is part of why it has gone largely unaddressed.
 
-Traditional vulnerability disclosure assumes a vendor who can patch a bug. Here the vulnerability is a design pattern, replicated independently across thousands of codebases. There is no single party to notify.
+Traditional vulnerability disclosure assumes a vendor who can patch a bug. Here the vulnerability is a design pattern that could be replicated independently across thousands of codebases. There is no single party to notify.
 
 Existing security tooling — static analysis, WAFs, endpoint monitoring — was built for a threat model where the attacker is trying to execute code or exfiltrate data. Denial of Wallet attacks do not execute code or exfiltrate data. They make legitimate API calls faster than the billing system can count them. No alert fires. No anomaly is detected. The first signal is an invoice.
 

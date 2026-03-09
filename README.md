@@ -10,7 +10,7 @@ This is a Denial of Wallet attack — a race condition that turns the gap betwee
 
 I ran a controlled study to find out whether this pattern was something individual developers were getting wrong, or whether the AI tools they were using to write the code were introducing it systematically.
 
-**Across 50 generation attempts spanning ten major models and five independent runs: manual review confirmed 100% vulnerability in executable code. Across 50 audit attempts: 98% correctly identified it.**
+**Across 50 generation attempts spanning ten major models and five independent runs: manual review confirmed 100% vulnerability in executable code (50/50). Across 50 audit attempts, models correctly identified it 49/50 times (98%); the remaining response returned only `</think>`.**
 
 The models know how to write safe code. They do not do it unprompted. And the race condition they keep writing wasn't always this dangerous — it became dangerous when LLM API calls made the cost of losing it real. The models trained before that shift. They haven't caught up. Only human review can close that loop.
 
@@ -50,7 +50,7 @@ Full write-up: [Check, Call, Deduct: The Race Condition That Can Bankrupt AI App
 | DeepSeek R1 | 5/5 | 4/5 | 2/5 |
 | Llama 4 Maverick | 5/5 | 5/5 | 0/5 |
 
-Automated classification initially flagged Gemini 3 Pro as protected in 2 runs due to atomic primitives appearing in pseudocode comments. Manual review confirmed the working implementation was vulnerable in all 5 runs.
+Manual review was used as the source of truth for all headline claims.
 
 ---
 
@@ -146,6 +146,7 @@ check-call-deduct/
 
 ```python
 from django.db import transaction
+from django.db.models import F
 
 def summarize_article_for_user(article: str, user_id: int) -> str:
     with transaction.atomic():
@@ -157,16 +158,20 @@ def summarize_article_for_user(article: str, user_id: int) -> str:
         user.credit -= 1
         user.save(update_fields=["credit"])
 
-    # API call happens outside the lock
-    response = client.responses.create(
-        model="gpt-4o",
-        input=[{"role": "user", "content": f"Summarize: {article}"}],
-    )
-
-    return response.output_text.strip()
+    # API call happens outside the lock; refund policy is product-dependent
+    try:
+        response = client.responses.create(
+            model="gpt-4o",
+            input=[{"role": "user", "content": f"Summarize: {article}"}],
+        )
+        return response.output_text.strip()
+    except Exception:
+        # Optional but common policy: refund on failed generation
+        User.objects.filter(ID=user_id).update(credit=F("credit") + 1)
+        raise
 ```
 
-`select_for_update()` acquires a row-level lock. The credit check and deduction happen atomically before the API call. The window closes.
+`select_for_update()` acquires a row-level lock. The credit check and deduction happen atomically before the API call, and refund behavior can be tailored to product policy. The window closes.
 
 ---
 
