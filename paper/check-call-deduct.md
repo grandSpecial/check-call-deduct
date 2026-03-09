@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This paper documents a systemic security vulnerability in LLM-backed applications: a race condition between credit checks and API call deductions that allows attackers to overdraw usage limits by orders of magnitude. Across five independent runs of a controlled prompt study, ten major large language models produced the vulnerable code pattern in 48 of 50 generation attempts (96%). Manual review of every output confirmed 100% vulnerability in executable code. In 49 of 50 audit attempts, models correctly identified the vulnerability when asked to review their own output (98%).
+This paper documents a systemic security vulnerability in LLM-backed applications: a race condition between credit checks and API call deductions that allows attackers to overdraw usage limits by orders of magnitude. Across five independent runs of a controlled prompt study, ten major large language models produced vulnerable executable code in 50 of 50 generation attempts (100%, manual review). In 49 of 50 audit attempts, models correctly identified the vulnerability when asked to review their own output (98%); the remaining audit response returned only the string `</think>`.
 
 The vulnerability is not a product of ignorance. Manual review reveals that models routinely applied unprompted judgment throughout their outputs — optimizing for user experience and API cost efficiency without instruction. They chose which defaults to apply. Security was not among them. The generation-evaluation gap is consistent, reproducible, and provider-agnostic.
 
@@ -93,6 +93,7 @@ The fix requires making the credit check and deduction atomic — a single unint
 
 ```python
 from django.db import transaction
+from django.db.models import F
 
 def summarize_article_for_user(article: str, user_id: int) -> str:
     with transaction.atomic():
@@ -104,16 +105,20 @@ def summarize_article_for_user(article: str, user_id: int) -> str:
         user.credit -= 1
         user.save(update_fields=["credit"])
 
-    # API call happens outside the lock
-    response = client.responses.create(
-        model="gpt-4o",
-        input=[{"role": "user", "content": f"Summarize: {article}"}],
-    )
-
-    return response.output_text.strip()
+    # API call happens outside the lock; refund policy is product-dependent
+    try:
+        response = client.responses.create(
+            model="gpt-4o",
+            input=[{"role": "user", "content": f"Summarize: {article}"}],
+        )
+        return response.output_text.strip()
+    except Exception:
+        # Optional but common policy: refund on failed generation
+        User.objects.filter(ID=user_id).update(credit=F("credit") + 1)
+        raise
 ```
 
-`select_for_update()` acquires a row-level lock that prevents concurrent conflicting updates (and lock acquisition on that row) until the transaction completes. The credit check and deduction happen together, before the API call. If the API call fails, no credit has been spent. The window between check and deduction is closed.
+`select_for_update()` acquires a row-level lock that prevents concurrent conflicting updates (and lock acquisition on that row) until the transaction completes. The credit check and deduction happen together, before the API call, and refund behavior can be tailored to business policy. The window between check and deduction is closed.
 
 ---
 
@@ -154,8 +159,6 @@ Model selection followed a consistent principle: one flagship and one coding-opt
 
 **Manual review confirmed 100% vulnerability in executable code across all 50 generation attempts.**
 
-Automated classification flagged 48 of 50 as vulnerable; the two exceptions were Gemini 3 Pro runs in which atomic primitives appeared in pseudocode comments but not in working implementation. Manual review confirmed those implementations as vulnerable, bringing the confirmed rate to 50/50.
-
 Full results by model across five runs:
 
 | Model | Vulnerable | Warned in Code | False Safety Claim |
@@ -194,7 +197,7 @@ A developer reviewing this output would likely read the comment as confirmation.
 
 **Models correctly identified the vulnerability in 49 of 50 audit attempts (98%).**
 
-The single exception was DeepSeek R1 in run 5, which produced a general discussion of best practices without explicitly identifying the race condition in the submitted code. Manual annotation confirmed this as a genuine miss. DeepSeek correctly identified the vulnerability in all other runs.
+The single exception was DeepSeek R1 in run 5, which returned only the delimiter string `</think>` with no analysis attached. Manual annotation treated this as a non-catch. DeepSeek correctly identified the vulnerability in all other runs.
 
 Full audit results by model:
 
@@ -260,7 +263,7 @@ The vulnerable pattern is not theoretical. It is present in production systems t
 
 In one system audited during the course of this research — a credit-gated LLM feature with explicit cost-control logic — concurrent requests allowed a user to overdraw their credit balance by more than 1,000 times. The developer had implemented a credit system specifically to prevent cost overruns. The implementation was generated with AI assistance. The vulnerability was not identified in the initial review process.
 
-The open source exposure compounds the problem. Thousands of LLM-backed applications have been published as open source in the past two years. Many are widely forked and deployed. The vulnerable pattern, once present in a popular repository, propagates through every project that forks it, copies it, or uses it as a reference.
+The open source exposure compounds the problem. A vast and likely uncountable number of LLM-assisted applications are now in circulation across open source and private codebases. Stack Overflow's 2025 Developer Survey (49,000+ respondents) reports that 84% of respondents are using or planning to use AI tools in development, and 51% of professional developers use AI tools daily. At this adoption level, vulnerable patterns propagate quickly through copies, forks, snippets, and generated scaffolds.
 
 An attacker targeting this vulnerability does not need to reverse-engineer a proprietary system. They need only find an open source project with the pattern — which is trivially easy — and identify a deployed instance.
 
@@ -331,6 +334,7 @@ A purpose-built review application (`review/review_app.py`) is included in the r
 - OWASP Top 10 for LLM Applications Project: https://owasp.org/www-project-top-10-for-large-language-model-applications/
 - Veracode, "2025 GenAI Code Security Report": https://www.veracode.com/state-of-software-security-genai/
 - Backslash Security research blog: https://backslash.security/blog
+- Stack Overflow, "2025 Developer Survey": https://survey.stackoverflow.co/2025/
 
 ```
 check-call-deduct/
